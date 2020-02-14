@@ -4,7 +4,6 @@
 
 BEGIN {
     in_table = 0
-    url = "https://raw.githubusercontent.com/tmux/tmux/master/options-table.c"
 }
 
 /^const struct options_table_entry/ { in_table = 1 }
@@ -15,7 +14,8 @@ in_table && match($0, /.name = \"([0-9A-Za-z-]+)\"/, m) {
 }
 
 END {
-    for (var in opts) {
-        print var
-    }
+    print "((options"
+    for (var in opts)
+        printf "\"%s\"", var
+    print ")"
 }
