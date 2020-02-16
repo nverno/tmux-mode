@@ -4,7 +4,7 @@
 
 match($0, /^([a-z-]+) (\([a-z]+\))?.*/, m) {
     abbr = gsub(/[)(]/, "\"", m[2])
-    cmds[m[0]] = sprintf("(\"%s\" %s \"%s\")", m[1], abbr ? m[2] : "nil", m[0])
+    cmds[m[0]] = sprintf("((\"%s\" %s) \"%s\")", m[1], abbr ? m[2] : "nil", m[0])
 }
 
 END {
