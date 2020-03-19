@@ -38,7 +38,10 @@
 ;;; Code:
 (eval-when-compile
   (require 'cl-lib)
-  (require 'lisp-mode))
+  (require 'lisp-mode)
+  (defvar tmux-command-usage)
+  (defvar tmux-commands)
+  (defvar tmux-set-options))
 
 (let-when-compile
     ((opts
