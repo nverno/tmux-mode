@@ -1,19 +1,24 @@
-# tmux-mode - tmux.conf major mode
+# Major mode for tmux files
 
-*Author:* Noah Peart <noah.v.peart@gmail.com><br>
-*URL:* [https://github.com/nverno/tmux-mode](https://github.com/nverno/tmux-mode)<br>
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-Major mode for tmux configuration files
+Major mode for tmux configuration files.
 
-### Installation
+Features:
+- font-locking
+- indentation
+- completion-at-point
+- eldoc
 
-Add to load path and generate autoloads, or
-```lisp
-(require 'tmux-mode)
+![example](doc/tmux-example.png)
+
+## Installing
+
+### Install tmux-mode.el from source
+
+- Clone this repository
+- Add the following to your emacs config
+
+```elisp
+(require "[cloned nverno/tmux-mode]/tmux-mode.el")
 ```
-
-Code:
-
-
----
-Converted from `tmux-mode.el` by [*el2markdown*](https://github.com/Lindydancer/el2markdown).
