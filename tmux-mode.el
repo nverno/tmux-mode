@@ -1,11 +1,12 @@
-;;; tmux-mode.el --- tmux.conf major mode -*- lexical-binding: t; -*-
+;;; tmux-mode.el --- Major mode for tmux configuration -*- lexical-binding: t; -*-
 ;;
 ;; This is free and unencumbered software released into the public domain.
 ;;
 ;; Author: Noah Peart <noah.v.peart@gmail.com>
 ;; URL: https://github.com/nverno/tmux-mode
-;; Package-Requires: 
-;; Created: 12 February 2020
+;; Package-Requires: ((emacs "26.1"))
+;; Version: 0.1.0
+;; Created: 18 October 2023
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -26,29 +27,38 @@
 ;;
 ;;; Commentary:
 ;;
-;; Major mode for tmux configuration files
+;; Major mode for tmux configuration files.
 ;;
-;;; Installation:
-;;
-;; Add to load path and generate autoloads, or
-;; ```lisp
-;; (require 'tmux-mode)
-;; ```
+;; Features:
+;; - font-locking
+;; - indentation
+;; - completion-at-point
+;; - eldoc
 ;;
 ;;; Code:
+
 (eval-when-compile
   (require 'cl-lib)
-  (require 'lisp-mode)
-  (defvar tmux-command-usage)
-  (defvar tmux-commands)
-  (defvar tmux-set-options))
+  (require 'lisp-mode))                 ; let-when-compile
+  
+(defcustom tmux-mode-indent-level 2
+  "Number of spaces for each indentation."
+  :group 'tmux
+  :type 'integer
+  :safe 'integerp)
+
+;;; Font-Locking
+
+(defvar tmux-mode-command-usage)
+(defvar tmux-mode-commands)
+(defvar tmux-mode-set-options)
 
 (let-when-compile
     ((opts
       '("other-pane-height" "set-titles-string" "window-status-activity-style"
         "default-size" "status-interval" "window-style" "status-left-style"
         "destroy-unattached" "status-right-style" "pane-border-format"
-        "visual-silence"
+        "visual-silence" "copy-mode" "copy-mode-vi"
         "message-command-style" "pane-base-index" "status-bg" "history-file"
         "lock-command" "update-environment" "pane-border-status" "clock-mode-colour"
         "aggressive-resize" "status-format" "prefix" "automatic-rename"
@@ -60,7 +70,8 @@
         "main-pane-width" "window-status-format" "mode-keys" "default-terminal"
         "set-titles" "window-status-bell-style" "allow-rename" "status-left-length"
         "visual-bell" "display-panes-time" "window-status-current-style" "xterm-keys"
-        "key-table" "pane-border-style" "focus-events" "window-status-last-style"
+        "key-table" "pane-border-style" "focus-event"
+        "focus-events" "window-status-last-style"
         "window-status-current-format" "remain-on-exit" "monitor-silence"
         "silence-action" "status-right" "status-position" "window-status-style"
         "word-separators" "exit-empty" "default-command" "renumber-windows"
@@ -70,7 +81,7 @@
         "visual-activity" "display-panes-colour" "assume-paste-time" "set-clipboard"
         "detach-on-destroy" "window-size" "terminal-overrides" "main-pane-height"
         "mouse" "clock-mode-style" "mode-style" "monitor-activity" "user-keys"
-        "lock-after-time"))
+        "lock-after-time" "status-utf8" "utf8"))
      (raw
       '((("set-buffer" "setb")
          "set-buffer (setb) [-a] [-b buffer-name] [-n new-buffer-name] data")
@@ -242,7 +253,7 @@
      (usages
       (let ((ht (make-hash-table :test #'equal)))
         (cl-loop for (kws . usage) in raw
-           do (dolist (k kws) (puthash k usage ht)))
+                 do (dolist (k kws) (puthash k usage ht)))
         ht)))
 
   (let ((opts (eval-when-compile opts))
@@ -250,59 +261,210 @@
         (usages (eval-when-compile usages))
         (cmds-re (eval-when-compile (regexp-opt cmds t)))
         (opts-re (eval-when-compile (regexp-opt opts t))))
+
     ;; save these for completion candidates / eldoc
-    (defconst tmux-set-options opts)
-    (defconst tmux-commands cmds)
-    (defconst tmux-command-usage usages)
+    (defconst tmux-mode-set-options opts)
+    (defconst tmux-mode-commands cmds)
+    (defconst tmux-mode-command-usage usages)
 
     (defconst tmux-font-lock-keywords
       `(;; builtin commands / shortcuts
         (,(concat "\\_<" cmds-re "\\_>") (1 font-lock-keyword-face))
         ;; set/setw options
-        (,(concat "\\_<" opts-re "\\_>") (1 font-lock-variable-name-face))
+        (,(concat "\\_<" opts-re "\\_>") (1 font-lock-builtin-face))
+        (,(rx bow "%" (or "if" "elif" "else" "endif" "hidden") eow)
+         . font-lock-keyword-face)
         ;; flags
-        (,(concat "\\_<-[A-Za-z0-9]+\\_>") . font-lock-preprocessor-face)
-        ;; EOL escapes
-        ("\\(^\\|[^\\]\\)\\(\\\\\\\\\\)*\\(\\\\\\)$" 3 font-lock-string-face)
-        ;; constants
-        (,(concat "\\_<" (regexp-opt '("on" "off") t) "\\_>")
-         (1 font-lock-constant-face))
+        (,(concat "\\_<-[-A-Za-z0-9]+\\_>") . font-lock-type-face)
         ;; @
-        ("\\_<\\(@[_A-Za-z0-9]+\\)\\_>" (1 font-lock-function-name-face))
-        ))))
+        ("\\B\\(@[-_A-Za-z0-9]+\\)\\b" (1 font-lock-function-name-face))
+        ;; EOL escapes
+        ("\\(^\\|[^\\]\\)\\(\\\\\\\\\\)*\\(\\\\\\)$"
+         (3 'font-lock-escape-face prepend))
+        ("\\(\\\\\\);" (1 font-lock-negation-char-face))
+        ;; constants
+        (,(concat "\\_<" (regexp-opt '("on" "off" "true" "false") t) "\\_>")
+         (1 font-lock-constant-face prepend))
+        (,(rx bow (+ num) eow) . 'font-lock-number-face)
+        ;; variables
+        ("\\$\\({#?\\)?\\([[:alpha:]_][[:alnum:]_]*\\|[-#?@!]\\)"
+         (2 'font-lock-variable-use-face prepend))
+        ("#{\\(\\w+\\)}" (1 'font-lock-variable-use-face prepend))
+        (,(rx bow (group (+ word)) (group "="))
+         (1 font-lock-variable-name-face)
+         (2 'font-lock-operator-face))
+        ("#\\({[><=]=:\\)" (1 'font-lock-operator-face prepend))))))
 
-;;; Completion / eldoc
-(defun tmux-mode-completion-at-point ()
-  (when-let ((bnds (bounds-of-thing-at-point 'symbol)))
-    (and (eq ?w (char-syntax (car bnds)))
-         (list (car bnds) (cdr bnds)
-               (completion-table-with-cache
-                (lambda (_string) (append tmux-commands tmux-set-options)))
-               :exclusive 'no))))
-
-(defun tmux-mode-eldoc-function ()
-  (when-let ((s (symbol-at-point)))
-    (gethash s tmux-command-usage)))
+;;; Syntax
 
 (defvar tmux-mode-syntax-table
   (let ((tbl (make-syntax-table)))
     (modify-syntax-entry ?# "<" tbl)
     (modify-syntax-entry ?\n ">" tbl)
     (modify-syntax-entry ?\' "\"" tbl)
-    (modify-syntax-entry ?@ "_" tbl)
-    tbl))
+    (modify-syntax-entry ?_ "w" tbl)
+    (modify-syntax-entry ?= "." tbl)
+    (modify-syntax-entry ?@ "'" tbl)
+    (modify-syntax-entry ?$ "'" tbl)
+    tbl)
+  "Syntax table for `tmux-mode'.")
+
+(defun tmux-mode--syntax-propertize (start end)
+  "Apply syntax properties to text between START and END."
+  (goto-char start)
+  (funcall
+   (syntax-propertize-rules
+    ("\\(#\\){[><=]=:\\(?:#{[^{}\\\n ]+}\\|[^{}\\\n ]*\\)*\\(}\\)"
+     (1 "|") (2 "|")))
+   (point) end))
+
+(defun tmux-mode--font-lock-syntactic-face-function (state)
+  "Syntactic face function for `font-lock-syntactic-face-function'.
+STATE is a `parse-partial-sexp' state."
+  (if-let ((q (nth 3 state)))
+      (let ((startpos (nth 8 state)))
+        (if (or (eq t q)
+                (eq (char-after (1+ startpos)) ?#))
+            'font-lock-doc-face
+          font-lock-string-face))
+    font-lock-comment-face))
+
+;;; Indentation
+
+(require 'smie)
+
+(defconst tmux-mode-grammar
+  (smie-prec2->grammar
+   (smie-bnf->prec2
+    '((exp)
+      (cmd ("%if" cmd "%endif")
+           ("%if" cmd "%else" cmd "%endif")
+           ("%if" exp "%elif" exp "%else" exp "%endif")
+           ("%if" exp "%elif" exp "%elif" exp "%else" exp "%endif")
+           (exp "\\" exp)
+           (exp "\n" exp)
+           (exp)))
+    '((assoc "\\" "\n"))))
+  "Smie grammar for `tmux-mode'.")
+
+(defun tmux-mode-smie-rules (kind token)
+  "Indentation rules for `tmux-mode'.
+See `smie-rules-function' for description of KIND and TOKEN."
+  (pcase (cons kind token)
+    (`(:elem . basic) tmux-mode-indent-level)
+    (`(:elem . args))
+    (`(:after . ,(or "%if" "%elif" "%else")) tmux-mode-indent-level)
+    (`(:after . "\n")
+     (if (smie-rule-parent-p "\\")
+         (smie-rule-parent (- tmux-mode-indent-level))
+       (smie-rule-parent)))
+    (`(:after . "\\")
+     (unless (smie-rule-parent-p "\\")
+       tmux-mode-indent-level))
+    (`(:list-intro . ,(or "" "\n" "%if" "%else" "%elif")) t)
+    (`(:close-all . ,_) t)))
+
+(defun tmux-mode-backward-token ()
+  "Function for `smie-backward-token-function' to find previous token."
+  (let ((bol (line-beginning-position)))
+    (forward-comment (- (point)))
+    (cond
+     ((< (point) bol)
+      (cond
+       ((tmux-mode--looking-back-at-continuation-p)
+        (goto-char (1+ (match-beginning 0)))
+        "\\")
+       ((or (and (eq ?\} (char-before))
+                 (get-text-property (1- (point)) 'syntax-table))
+            (and (char-before)
+                 (eq ?\" (char-syntax (char-before)))))
+        (backward-sexp)
+        (let ((tok (funcall #'smie-default-backward-token)))
+          (pcase tok
+            ((or "%if" "%elif" "%else") tok)
+            (_ "\n"))))
+       (t
+        (skip-syntax-backward " ")
+        (if (eq ?\" (ignore-errors (char-syntax (char-before)))) "\n"
+          (let ((tok (funcall #'smie-default-backward-token)))
+            (pcase tok
+              ((or "" "%else" "%endif") tok)
+              (_ "\n")))))))
+     (t (funcall #'smie-default-backward-token)))))
+
+(defun tmux-mode-forward-token ()
+  "Function for `smie-forward-token-function' to find next token."
+  (forward-comment (point-max))
+  (cond
+   ((looking-at-p "\\(?:\\\\\\\\\\)*\\\\\n")
+    (forward-line 1) "\\")
+   (t (funcall #'smie-default-forward-token))))
+
+;; Like `sh-smie--looking-back-at-continuation-p' ignores commented
+;; line-continuations
+(defun tmux-mode--looking-back-at-continuation-p ()
+  "Non-nil when previous line is escaped."
+  (unless (nth 4 (syntax-ppss (and (not (bobp)) (bolp) (1- (point)))))
+    (and (if (eq (char-before) ?\n) (progn (forward-char -1) t) (eolp))
+         (looking-back "\\(?:^\\|[^\\]\\)\\(?:\\\\\\\\\\)*\\\\"
+                       (line-beginning-position)))))
+
+;;; Completion / eldoc
+
+(defun tmux-mode-completion-at-point ()
+  "Completion-at-point function for `tmux-mode'."
+  (when-let ((bnds (bounds-of-thing-at-point 'symbol)))
+    (and (eq ?w (char-syntax (car bnds)))
+         (list (car bnds) (cdr bnds)
+               (completion-table-with-cache
+                (lambda (_string) (append tmux-mode-commands tmux-mode-set-options)))
+               :exclusive 'no))))
+
+(defun tmux-mode-current-command ()
+  "Return current tmux command or nil if there is none."
+  (let ((state (syntax-ppss)))
+    (unless (nth 4 state)
+      (save-excursion
+        (when-let ((beg (nth 8 state)))
+          (goto-char beg))
+        (while (and
+                (not (bobp))
+                (let ((face (ignore-errors (get-char-property (point) 'face))))
+                  (not (memq 'font-lock-keyword-face
+                             (if (listp face) face (list face)))))
+                (condition-case nil
+                    (progn (backward-sexp 1) t)
+                  (scan-error
+                   (condition-case nil (progn (up-list -1 t t) t)
+                     (scan-error nil))))))
+        (thing-at-point 'symbol)))))
+
+(defun tmux-mode-eldoc-function ()
+  "Eldoc function for `tmux-mode'."
+  (when-let ((s (tmux-mode-current-command)))
+    (car (gethash s tmux-mode-command-usage))))
 
 ;;;###autoload
 (define-derived-mode tmux-mode prog-mode "Tmux"
   "Major mode for tmux configuration files.
 
 \\{tmux-mode-map}"
-  (setq font-lock-defaults '(tmux-font-lock-keywords))
+  :group 'tmux
   (setq-local comment-start "# ")
   (setq-local comment-end "")
-  (add-hook 'completion-at-point-functions #'tmux-mode-completion-at-point)
+  (setq-local comment-start-skip "#+ *")
+  ;; (setq-local comment-add 1)
+  (setq-local font-lock-defaults
+              `( tmux-font-lock-keywords nil nil nil nil
+                 (font-lock-syntactic-face-function
+                  . ,#'tmux-mode--font-lock-syntactic-face-function)))
+  (smie-setup tmux-mode-grammar #'tmux-mode-smie-rules
+              :forward-token #'tmux-mode-forward-token
+              :backward-token #'tmux-mode-backward-token)
+  (add-hook 'completion-at-point-functions #'tmux-mode-completion-at-point nil t)
   (add-function :before-until (local 'eldoc-documentation-function)
-                #'tmux-mode-eldoc-function))
+                #'tmux-mode-eldoc-function)
+  (setq-local syntax-propertize-function #'tmux-mode--syntax-propertize))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist (cons "\\.tmux.*" 'tmux-mode))
