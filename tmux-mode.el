@@ -1,7 +1,5 @@
 ;;; tmux-mode.el --- Major mode for tmux configuration -*- lexical-binding: t; -*-
 ;;
-;; This is free and unencumbered software released into the public domain.
-;;
 ;; Author: Noah Peart <noah.v.peart@gmail.com>
 ;; URL: https://github.com/nverno/tmux-mode
 ;; Package-Requires: ((emacs "26.1"))
@@ -467,7 +465,7 @@ See `smie-rules-function' for description of KIND and TOKEN."
   (setq-local syntax-propertize-function #'tmux-mode--syntax-propertize))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist (cons "\\.tmux.*" 'tmux-mode))
+(add-to-list 'auto-mode-alist (cons "\\.tmux\\.conf\\'" 'tmux-mode))
 
 (provide 'tmux-mode)
 ;; Local Variables:
