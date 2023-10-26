@@ -465,7 +465,7 @@ See `smie-rules-function' for description of KIND and TOKEN."
   (setq-local syntax-propertize-function #'tmux-mode--syntax-propertize))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist (cons "\\.tmux\\.conf\\'" 'tmux-mode))
+(add-to-list 'auto-mode-alist (cons "\\.?tmux\\.conf\\'" 'tmux-mode))
 
 (provide 'tmux-mode)
 ;; Local Variables:
