@@ -5,6 +5,7 @@
 ;; Package-Requires: ((emacs "26.1"))
 ;; Version: 0.1.0
 ;; Created: 18 October 2023
+;; Keywords: languages tmux config
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
